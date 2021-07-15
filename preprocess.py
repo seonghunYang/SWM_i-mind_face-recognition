@@ -8,7 +8,6 @@ def cropFace(img, area):
     top = area[1]
     right = area[2]
     bottom = area[3]
-
     return img_copy[top: bottom, left: right]
 
 
@@ -56,16 +55,17 @@ def alignImage(frame, faces):
     return result
 
 def preprocessImage(img, flip=True):
+    copy_img = img.copy()
     device = torch.device('cuda')
-    img = np.array(img)
-    img = np.transpose(img, (2, 0, 1))
-    img_normal = torch.from_numpy(img).to(device).unsqueeze(0).float()
+    copy_img = np.array(copy_img)
+    copy_img = np.transpose(copy_img, (2, 0, 1))
+    img_normal = torch.from_numpy(copy_img).to(device).unsqueeze(0).float()
     # normalize
     img_normal.div_(255).sub_(0.5).div_(0.5)
     # flip image
     if flip:
-        img = np.flip(img, axis=2).copy()
-        img_flip = torch.from_numpy(img).to(device).unsqueeze(0).float()
+        copy_img = np.flip(copy_img, axis=2).copy()
+        img_flip = torch.from_numpy(copy_img).to(device).unsqueeze(0).float()
         img_flip.div_(255).sub_(0.5).div_(0.5)
 
         return img_normal, img_flip

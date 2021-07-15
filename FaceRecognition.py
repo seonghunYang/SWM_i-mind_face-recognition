@@ -1,6 +1,4 @@
-import cv2, time
-import torch
-import os
+import cv2, time, torch, os
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import normalize
 
