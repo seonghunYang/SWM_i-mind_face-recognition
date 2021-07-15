@@ -1,6 +1,7 @@
 import cv2, time, torch, os
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import normalize
+from sklearn.metrics.pairwise import cosine_similarity
 
 from retinaface import RetinaFace
 from preprocess import alignImage, preprocessImage
@@ -30,6 +31,7 @@ def collectFaceImageWithSeed(input_video_path, model_path, seed, threshold):
     
     frame_idx = 0
     while True:
+        cap.set(1, frame_idx)
         has_frame, img_frame = cap.read()
         if not has_frame:
             print("처리 완료")
@@ -57,7 +59,7 @@ def collectFaceImageWithSeed(input_video_path, model_path, seed, threshold):
             print("에러가 발생했습니다. 현재까지 상황을 저장합니다")
             break
         print('frame별 detection 수행 시간:', round(time.time() - stime, 4),frame_idx)
-        frame_idx += 1
+        frame_idx += 3
     cap.release()
 
     print("최종 완료 수행 시간: ", round(time.time() - btime, 4))
@@ -123,3 +125,29 @@ def createEmbedingSeed(root_path, folder_name , model, img_show=False):
                     plt.show()
     seed['embedding'] = normalize(seed['embedding'])
     return seed
+
+def fiterCosineSimilarity(collect_img):
+    embeddings = []
+    for i in range(len(collect_img)):
+        img = collect_img[i][0]
+        im, flip_im = preprocessImage(img)
+        embedding = imgToEmbedding(im, recognition_model, img_flip=flip_im)
+        embeddings.append(embedding)
+
+    similarity_metrics = cosine_similarity(embeddings)
+
+    duplicate_image_idx = set()
+
+    for i in range(len(similarity_metrics[0])):
+        if i in duplicate_image_idx:
+            continue
+        for j in range(i+1, len(similarity_metrics[1])):
+            if similarity_metrics[i][j] >= 0.8:
+                duplicate_image_idx.add(j)
+    new_collect_img = []
+
+    for i in range(len(collect_img)):
+        if i in duplicate_image_idx:
+            continue
+        new_collect_img.append(collect_img[i])
+    return new_collect_img
