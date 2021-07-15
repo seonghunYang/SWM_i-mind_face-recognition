@@ -9,6 +9,7 @@ from preprocess import alignImage, preprocessImage
 from inference import imgToEmbedding, identifyFace
 from visualization import drawFrameWithBbox
 from backbones import get_model
+from utils.utils import checkExtenstion 
 
 def loadModel(backbone_name, weight_path, fp16=False):
     model = get_model(backbone_name, fp16=fp16)
@@ -77,15 +78,15 @@ def createEmbedingDB(db_folder_path, model, img_show=False):
         label = face_folder
         img_folder_path = db_folder_path + "/" + face_folder
         img_folders = os.listdir(img_folder_path)
-        print(label)
         labels = []
         for img_path in img_folders:
+            if not checkExtenstion(img_path):
+                continue
             img = cv2.imread(img_folder_path + "/" + img_path)
             faces = RetinaFace.detect_faces(img_path=img)
         # bbox
             if (type(faces) == dict):
                 alignment_face_imgs = alignImage(img, faces)
-
             # embedding
                 for face_img in alignment_face_imgs:
                     process_face_img, process_face_img_flip = preprocessImage(face_img)
