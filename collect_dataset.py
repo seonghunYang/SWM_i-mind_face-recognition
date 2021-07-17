@@ -126,12 +126,12 @@ def createEmbedingSeed(root_path, folder_name , model, img_show=False):
     seed['embedding'] = normalize(seed['embedding'])
     return seed
 
-def fiterCosineSimilarity(collect_img):
+def filterCosineSimilarity(collect_img, model):
     embeddings = []
     for i in range(len(collect_img)):
         img = collect_img[i][0]
         im, flip_im = preprocessImage(img)
-        embedding = imgToEmbedding(im, recognition_model, img_flip=flip_im)
+        embedding = imgToEmbedding(im, model, img_flip=flip_im)
         embeddings.append(embedding)
 
     similarity_metrics = cosine_similarity(embeddings)
@@ -151,3 +151,14 @@ def fiterCosineSimilarity(collect_img):
             continue
         new_collect_img.append(collect_img[i])
     return new_collect_img
+
+def selectNearImageAndSave(filter_collect_img, number):
+    select_img = filter_collect_img.copy()
+    if len(select_img) > 60:
+      select_img.sort(key=lambda x: x[1])
+      select_img = select_img[:60]
+    for idx, img in enumerate(select_img):
+      directory = "../our_children_changed/dataset/{}".format(number)
+      if not os.path.exists(directory):
+        os.makedirs(directory)
+      plt.imsave(directory + "/{}.jpg".format(idx), img[0])
