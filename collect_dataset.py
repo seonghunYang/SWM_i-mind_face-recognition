@@ -167,17 +167,18 @@ def collectDatasetPipeline(root_path, page, number, model):
     try:
         seed = createEmbedingSeed(root_path + "/seed", str(number), model, img_show=True)
         print("시드 라벨 개수: ", len(seed['labels']))
-        #filter#1
+        #filter-1
         collect_img = collectFaceImageWithSeed(root_path + "/video/page{}/{}.mp4".format(page, number), model, seed, 1)
         print("1차 필터링 완료")
         for i in range(len(collect_img)):
             print("{}번: {}개".format(i,len(collect_img[i])))
-        #filter#2 and filter#3,
+        #filter-1 and filter-1
         for i in range(len(collect_img)):
             filter_collect_img = filterCosineSimilarity(collect_img[i], model)
             print("{}번 2차필터링 완료: {}개".format(i ,len(filter_collect_img)) )
             #save
-            selectNearImageAndSave(filter_collect_img, number+i)
+            save_folder_name = int(number) + int(i)
+            selectNearImageAndSave(filter_collect_img, save_folder_name)
             print("{}번 3차 필터링 완료 저장 끝".format(i))
     except:
         logging.error(traceback.format_exc())
