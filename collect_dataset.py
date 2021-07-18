@@ -1,4 +1,4 @@
-import cv2, time, torch, os
+import cv2, time, torch, os, traceback, logging
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import normalize
 from sklearn.metrics.pairwise import cosine_similarity
@@ -37,28 +37,24 @@ def collectFaceImageWithSeed(input_video_path, model_path, seed, threshold):
             print("처리 완료")
             break
         stime = time.time()
-        try:
-            detect_faces = RetinaFace.detect_faces(img_path=img_frame, model=detect_model)
-            if (type(detect_faces) == dict):
-                crop_face_imgs = []
-                for key in detect_faces.keys():
-                    face = detect_faces[key]
-                    facial_area = face['facial_area']
-                    crop_face = cropFullFace(img_frame, facial_area)
-                    crop_face = cv2.resize(crop_face, (112, 112))
-                    crop_face_imgs.append(crop_face)
+        detect_faces = RetinaFace.detect_faces(img_path=img_frame, model=detect_model)
+        if (type(detect_faces) == dict):
+            crop_face_imgs = []
+            for key in detect_faces.keys():
+                face = detect_faces[key]
+                facial_area = face['facial_area']
+                crop_face = cropFullFace(img_frame, facial_area)
+                crop_face = cv2.resize(crop_face, (112, 112))
+                crop_face_imgs.append(crop_face)
 
-                for face_img in crop_face_imgs:
-                    process_face_img, process_flip_face_img = preprocessImage(face_img)
-                    embedding = imgToEmbedding(process_face_img, recognition_model, img_flip=process_flip_face_img)
-                    # 신원 확인이 아니라 비교 하고 이미지 수집해야함
-                    seed_idx_list, seed_distance_list = verifyWithSeed(embedding, seed, threshold)
-                    if len(seed_idx) > 0:
-                        for idx, seed_idx in enumerate(seed_idx_list):
-                            collect_img[seed_idx].append([face_img, seed_distance_list[idx]])
-        except:
-            print("에러가 발생했습니다. 현재까지 상황을 저장합니다")
-            break
+            for face_img in crop_face_imgs:
+                process_face_img, process_flip_face_img = preprocessImage(face_img)
+                embedding = imgToEmbedding(process_face_img, recognition_model, img_flip=process_flip_face_img)
+                # 신원 확인이 아니라 비교 하고 이미지 수집해야함
+                seed_idx_list, seed_distance_list = verifyWithSeed(embedding, seed, threshold)
+                if len(seed_idx_list) > 0:
+                    for idx, seed_idx in enumerate(seed_idx_list):
+                        collect_img[seed_idx].append([face_img, seed_distance_list[idx]])
         print('frame별 detection 수행 시간:', round(time.time() - stime, 4),frame_idx)
         frame_idx += 3
     cap.release()
@@ -107,7 +103,7 @@ def createEmbedingSeed(root_path, folder_name , model, img_show=False):
         if (type(detect_face) == dict):
             key = list(detect_face.keys())[0]
             face = detect_face[key]
-            acial_area = face['facial_area']
+            facial_area = face['facial_area']
             crop_face = cropFullFace(img, facial_area)
             crop_face = cv2.resize(crop_face, (112, 112))
             
@@ -158,3 +154,26 @@ def selectNearImageAndSave(filter_collect_img, number):
       if not os.path.exists(directory):
         os.makedirs(directory)
       plt.imsave(directory + "/{}.jpg".format(idx), img[0])
+
+
+def collectDatasetPipeline(root_path, page, number, model):
+    #seed
+    logging.basicConfig(filename=root_path + "/log/page{}.log".format(page), format="%(asctime)s %(levelname)s %(message)s")
+    try:
+        seed = createEmbedingSeed(root_path + "/seed", str(number), model, img_show=True)
+        print("시드 라벨 개수: ", len(seed['labels']))
+        #filter#1
+        collect_img = collectFaceImageWithSeed(root_path + "/video/page{}/{}.mp4".format(page, number), model, seed, 1)
+        print("1차 필터링 완료")
+        for i in range(len(collect_img)):
+            print("{}번: {}개".format(i,len(collect_img[i])))
+        #filter#2 and filter#3,
+        for i in range(len(collect_img)):
+            filter_collect_img = filterCosineSimilarity(collect_img[i], model)
+            print("{}번 2차필터링 완료: {}개".format(i ,len(filter_collect_img)) )
+            #save
+            selectNearImageAndSave(filter_collect_img, number+i)
+            print("{}번 3차 필터링 완료 저장 끝".format(i))
+    except:
+        logging.error(traceback.format_exc())
+        traceback.print_exc()
