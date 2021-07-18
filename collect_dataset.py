@@ -8,7 +8,7 @@ from preprocess import alignImage, preprocessImage
 from inference import imgToEmbedding, identifyFace, calculateDistance
 from visualization import drawFrameWithBbox
 from backbones import get_model
-from utils.utils import checkExtenstion 
+from utils.utils import checkImgExtenstion 
 
 
 def collectFaceImageWithSeed(input_video_path, model_path, seed, threshold):
@@ -23,9 +23,9 @@ def collectFaceImageWithSeed(input_video_path, model_path, seed, threshold):
 
     detect_model = RetinaFace.build_model()
     if type(model_path) == str:
-        identify_model = loadModel("r50", model_path)
+        recognition_model = loadModel("r50", model_path)
     else:
-        identify_model = model_path
+        recognition_model = model_path
     
     collect_img = [[] for _ in range(len(seed['labels']))]
     
@@ -49,12 +49,13 @@ def collectFaceImageWithSeed(input_video_path, model_path, seed, threshold):
                     crop_face_imgs.append(crop_face)
 
                 for face_img in crop_face_imgs:
-                    process_face_img, process_face_img_flip = preprocessImage(face_img)
-                    embedding = imgToEmbedding(process_face_img, identify_model, img_flip=process_face_img_flip)
+                    process_face_img, process_flip_face_img = preprocessImage(face_img)
+                    embedding = imgToEmbedding(process_face_img, recognition_model, img_flip=process_flip_face_img)
                     # 신원 확인이 아니라 비교 하고 이미지 수집해야함
-                    seed_idx, seed_distance = verifyWithSeed(embedding, seed, threshold)
-                    if seed_idx >= 0:
-                        collect_img[seed_idx].append([face_img, seed_distance])
+                    seed_idx_list, seed_distance_list = verifyWithSeed(embedding, seed, threshold)
+                    if len(seed_idx) > 0:
+                        for idx, seed_idx in enumerate(seed_idx_list):
+                            collect_img[seed_idx].append([face_img, seed_distance_list[idx]])
         except:
             print("에러가 발생했습니다. 현재까지 상황을 저장합니다")
             break
@@ -63,20 +64,20 @@ def collectFaceImageWithSeed(input_video_path, model_path, seed, threshold):
     cap.release()
 
     print("최종 완료 수행 시간: ", round(time.time() - btime, 4))
+    
     return collect_img
 
 def verifyWithSeed(embedding, seed, threshold):
-    min_distance = threshold
-    min_idx = -1
-
+    idx_list = []
+    distance_list = []
     for idx, seed_embedding in enumerate(seed['embedding']):
         distance = calculateDistance(embedding, seed_embedding)
         
-        if distance < min_distance:
-            min_idx = idx
-            min_distance = distance
+        if distance < threshold:
+            idx_list.append(idx)
+            distance_list.append(distance)
 
-    return min_idx, min_distance
+    return idx_list, distance_list
     
 def cropFullFace(img, area):
     img_copy = img.copy()
@@ -95,34 +96,29 @@ def createEmbedingSeed(root_path, folder_name , model, img_show=False):
         "labels": [],
         "embedding": []
     }
-    label = folder_name
     labels = []
-    seed_img_folder = root_path + "/" + folder_name
-    seed_img_list = os.listdir(seed_img_folder)
-    for seed_img in seed_img_list:
-        if not checkExtenstion(seed_img):
+    seed_folder_path = root_path + "/" + folder_name
+    seed_img_list = os.listdir(seed_folder_path)
+    for idx, seed_img in enumerate(seed_img_list):
+        if not checkImgExtenstion(seed_img):
             continue
-        img = cv2.imread(seed_img_folder + "/" + seed_img)
-        detect_faces = RetinaFace.detect_faces(img_path=img)
-    # bbox
-        if (type(detect_faces) == dict):
-            crop_face_imgs = []
-            for key in detect_faces.keys():
-                face = detect_faces[key]
-                facial_area = face['facial_area']
-                crop_face = cropFullFace(img, facial_area)
-                crop_face = cv2.resize(crop_face, (112, 112))
-                crop_face_imgs.append(crop_face)
-        # embedding
-            for face_img in crop_face_imgs:
-                process_face_img, process_face_img_flip = preprocessImage(face_img)
-                embedding = imgToEmbedding(process_face_img, model, img_flip=process_face_img_flip)
-                seed["embedding"].append(embedding)
-                seed['labels'].append(label)
-                labels.append(label)
-                if img_show:
-                    plt.imshow(face_img)
-                    plt.show()
+        img = cv2.imread(seed_folder_path + "/" + seed_img)
+        detect_face = RetinaFace.detect_faces(img_path=img)
+        if (type(detect_face) == dict):
+            key = list(detect_face.keys())[0]
+            face = detect_face[key]
+            acial_area = face['facial_area']
+            crop_face = cropFullFace(img, facial_area)
+            crop_face = cv2.resize(crop_face, (112, 112))
+            
+            #embedding
+            process_face_img, process_flip_face_img = preprocessImage(crop_face)
+            embedding = imgToEmbedding(process_face_img, model, img_flip=process_flip_face_img)
+            seed["embedding"].append(embedding)
+            seed['labels'].append(idx)
+            if img_show:
+                plt.imshow(crop_face)
+                plt.show()
     seed['embedding'] = normalize(seed['embedding'])
     return seed
 
