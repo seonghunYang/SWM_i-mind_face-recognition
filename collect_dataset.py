@@ -37,7 +37,12 @@ def collectFaceImageWithSeed(input_video_path, model_path, seed, threshold):
             print("처리 완료")
             break
         stime = time.time()
-        detect_faces = RetinaFace.detect_faces(img_path=img_frame, model=detect_model)
+        try:
+            detect_faces = RetinaFace.detect_faces(img_path=img_frame, model=detect_model)
+        except:
+            print('프레임 에러 발생 다음 프레임 이동')
+            frame_idx += 3
+            continue
         if (type(detect_faces) == dict):
             crop_face_imgs = []
             for key in detect_faces.keys():
