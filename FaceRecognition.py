@@ -7,7 +7,7 @@ from preprocess import alignImage, preprocessImage
 from inference import imgToEmbedding, identifyFace
 from visualization import drawFrameWithBbox
 from backbones import get_model
-from utils.utils import checkImgExtenstion 
+from utils.utils import checkImgExtension 
 
 def loadModel(backbone_name, weight_path, fp16=False):
     model = get_model(backbone_name, fp16=fp16)
@@ -77,7 +77,7 @@ def createEmbedingDB(db_folder_path, model, img_show=False):
         face_folder_path = db_folder_path + "/" + face_folder_name
         img_name_list = os.listdir(face_folder_path)
         for img_name in img_name_list:
-            if not checkImgExtenstion(img_name):
+            if not checkImgExtension(img_name):
                 continue
             img = cv2.imread(face_folder_path + "/" + img_name)
             detect_faces = RetinaFace.detect_faces(img_path=img)
