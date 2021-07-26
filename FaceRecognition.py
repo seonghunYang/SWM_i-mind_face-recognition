@@ -73,7 +73,7 @@ def faceRecognition(input_video_path, out_video_path, model_path, annoy_tree, id
 
     print("최종 완료 수행 시간: ", round(time.time() - btime, 4))
 
-def createEmbedingDB(db_folder_path, model, img_show=False):
+def createEmbedingDB(db_folder_path, model, img_show=False, build_tree=10):
     db = {
         "labels": [],
         "embedding": []
@@ -112,5 +112,5 @@ def createEmbedingDB(db_folder_path, model, img_show=False):
         annoy_tree.add_item(idx, db['embedding'][idx])
         idx_to_label[idx] = db['labels'][idx]
         
-    annoy_tree.build(10)
+    annoy_tree.build(build_tree)
     return annoy_tree, idx_to_label
