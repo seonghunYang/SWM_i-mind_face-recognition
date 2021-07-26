@@ -20,14 +20,14 @@ def calculateDistance(embedding1, embedding2):
     return distance
 
 def identifyFace(embedding, db, threshold=False):
-    min_distance = threshold
-    label = ''
+    # min_distance = threshold
+    # label = ''
 
-    for idx, db_embedding in enumerate(db['embedding']):
-        distance = calculateDistance(embedding, db_embedding)
+    # for idx, db_embedding in enumerate(db['embedding']):
+    #     distance = calculateDistance(embedding, db_embedding)
 
-        if min_distance == False or distance <= min_distance:
-            min_distance = distance
-            label = db['labels'][idx]
+    #     if min_distance == False or distance <= min_distance:
+    #         min_distance = distance
+    #         label = db['labels'][idx]
 
     return label

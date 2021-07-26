@@ -1,7 +1,8 @@
-import cv2, time, torch, os
+import cv2, time, torch, os, traceback
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import normalize
 
+from annoy import AnnoyIndex
 from retinaface import RetinaFace
 from preprocess import alignImage, preprocessImage
 from inference import imgToEmbedding, identifyFace
@@ -16,7 +17,7 @@ def loadModel(backbone_name, weight_path, fp16=False):
     model = model.cuda()
     return model
 
-def faceRecognition(input_video_path, out_video_path, model_path, db):
+def faceRecognition(input_video_path, out_video_path, model_path, annoy_tree, idx_to_label):
     
     cap = cv2.VideoCapture(input_video_path)
 
@@ -45,18 +46,24 @@ def faceRecognition(input_video_path, out_video_path, model_path, db):
             break
         stime = time.time()
         try:
-          detect_faces = RetinaFace.detect_faces(img_path=img_frame, model=detect_model)
-          if (type(detect_faces) == dict):
-              align_face_imgs = alignImage(img_frame, detect_faces)
-              identities = []
-              for face_img in align_face_imgs:
-                  process_face_img, process_flip_face_img = preprocessImage(face_img)
-                  embedding = imgToEmbedding(process_face_img, recognition_model, img_flip=process_flip_face_img)
-                  identity = identifyFace(embedding, db)
-                  identities.append(identity)
-              img_frame = drawFrameWithBbox(img_frame, detect_faces, identities)
+            detect_faces = RetinaFace.detect_faces(img_path=img_frame, model=detect_model)
+            if (type(detect_faces) == dict):
+                align_face_imgs = alignImage(img_frame, detect_faces)
+                identities = []
+                for face_img in align_face_imgs:
+                    process_face_img, process_flip_face_img = preprocessImage(face_img)
+                    embedding = imgToEmbedding(process_face_img, recognition_model, img_flip=process_flip_face_img)
+
+                    annoy_idx, distacne = annoy_tree.get_nns_by_vector(embedding, 1, include_distances=True)
+                    identity = idx_to_label[annoy_idx[0]]
+
+                    # identity = identity + str(distacne)
+
+                    identities.append(identity)
+                img_frame = drawFrameWithBbox(img_frame, detect_faces, identities)
         except:
             print("에러가 발생했습니다. 현재까지 상황을 저장합니다")
+            traceback.print_exc()
             break
         print('frame별 detection 수행 시간:', round(time.time() - stime, 4),frame_idx)
         frame_idx += 1
@@ -74,6 +81,8 @@ def createEmbedingDB(db_folder_path, model, img_show=False):
     face_folder_list = os.listdir(db_folder_path)
     for face_folder_name in face_folder_list:
         label = face_folder_name
+        labels = []
+
         face_folder_path = db_folder_path + "/" + face_folder_name
         img_name_list = os.listdir(face_folder_path)
         for img_name in img_name_list:
@@ -89,9 +98,19 @@ def createEmbedingDB(db_folder_path, model, img_show=False):
                     embedding = imgToEmbedding(process_face_img, model, img_flip=process_flip_face_img)
                     db["embedding"].append(embedding)
                     db['labels'].append(label)
+                    labels.append(label)
                 if img_show:
-                    img_bbox = drawFrameWithBbox(img, detect_faces, db['labels'])
+                    img_bbox = drawFrameWithBbox(img, detect_faces, labels)
                     plt.imshow(img_bbox)
                     plt.show()
     db['embedding'] = normalize(db['embedding'])
-    return db
+
+    #annoy 객체에 담기
+    idx_to_label = {}
+    annoy_tree = AnnoyIndex(512, "euclidean")
+    for idx in range(len(db['labels'])):
+        annoy_tree.add_item(idx, db['embedding'][idx])
+        idx_to_label[idx] = db['labels'][idx]
+        
+    annoy_tree.build(10)
+    return annoy_tree, idx_to_label
