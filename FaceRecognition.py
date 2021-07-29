@@ -1,4 +1,4 @@
-import cv2, time, torch, os, traceback
+import cv2, time, torch, os, traceback, pickle
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import normalize
 
@@ -73,11 +73,14 @@ def faceRecognition(input_video_path, out_video_path, model_path, annoy_tree, id
 
     print("최종 완료 수행 시간: ", round(time.time() - btime, 4))
 
-def createEmbedingDB(db_folder_path, model, img_show=False, build_tree=10):
+def createEmbeddingDB(db_folder_path, db_save_folder=None img_show=False, build_tree=10):
     db = {
         "labels": [],
         "embedding": []
     }
+
+    recognition_model = loadModel("r50", "/content/drive/MyDrive/face_recognition_modules/glint360k_cosface_r50_fp16_0.1/backbone.pth")
+
     face_folder_list = os.listdir(db_folder_path)
     for face_folder_name in face_folder_list:
         label = face_folder_name
@@ -95,7 +98,7 @@ def createEmbedingDB(db_folder_path, model, img_show=False, build_tree=10):
             # embedding
                 for face_img in alignment_face_imgs:
                     process_face_img, process_flip_face_img = preprocessImage(face_img)
-                    embedding = imgToEmbedding(process_face_img, model, img_flip=process_flip_face_img)
+                    embedding = imgToEmbedding(process_face_img, recognition_model, img_flip=process_flip_face_img)
                     db["embedding"].append(embedding)
                     db['labels'].append(label)
                     labels.append(label)
@@ -113,4 +116,9 @@ def createEmbedingDB(db_folder_path, model, img_show=False, build_tree=10):
         idx_to_label[idx] = db['labels'][idx]
         
     annoy_tree.build(build_tree)
+    if db_save_folder:
+        annoy_tree.save(db_save_folder+"/db.ann")
+        with open(db_save_folder +"/db.pickle", "wb") as f:
+            pickle.dump(idx_to_label, f)
+
     return annoy_tree, idx_to_label
