@@ -17,7 +17,7 @@ def loadModel(backbone_name, weight_path, fp16=False):
     model = model.cuda()
     return model
 
-def faceRecognition(input_video_path, out_video_path, model_path, annoy_tree, idx_to_label):
+def faceRecognition(input_video_path, out_video_path, model_path, annoy_tree, id_to_label):
     
     cap = cv2.VideoCapture(input_video_path)
 
@@ -33,10 +33,7 @@ def faceRecognition(input_video_path, out_video_path, model_path, annoy_tree, id
     btime = time.time()
 
     detect_model = RetinaFace.build_model()
-    if type(model_path) == str:
-        recognition_model = loadModel("r50", model_path)
-    else:
-        recognition_model = model_path
+    recognition_model = loadModel("r50", "/content/drive/MyDrive/face_recognition_modules/glint360k_cosface_r50_fp16_0.1/backbone.pth")
     
     frame_idx = 0
     while True:
@@ -55,9 +52,9 @@ def faceRecognition(input_video_path, out_video_path, model_path, annoy_tree, id
                     embedding = imgToEmbedding(process_face_img, recognition_model, img_flip=process_flip_face_img)
 
                     annoy_idx, distacne = annoy_tree.get_nns_by_vector(embedding, 1, include_distances=True)
-                    identity = idx_to_label[annoy_idx[0]]
+                    identity = id_to_label[annoy_idx[0]]
 
-                    # identity = identity + str(distacne)
+                    identity = identity + str(distacne)
 
                     identities.append(identity)
                 img_frame = drawFrameWithBbox(img_frame, detect_faces, identities)
