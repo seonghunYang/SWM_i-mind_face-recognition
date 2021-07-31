@@ -109,16 +109,16 @@ def createEmbeddingDB(db_folder_path, db_save_folder=None, img_show=False, build
     db['embedding'] = normalize(db['embedding'])
 
     #annoy 객체에 담기
-    idx_to_label = {}
+    id_to_label = {}
     annoy_tree = AnnoyIndex(512, "euclidean")
     for idx in range(len(db['labels'])):
         annoy_tree.add_item(idx, db['embedding'][idx])
-        idx_to_label[idx] = db['labels'][idx]
+        id_to_label[idx] = db['labels'][idx]
         
     annoy_tree.build(build_tree)
     if db_save_folder:
         annoy_tree.save(db_save_folder+"/db.ann")
         with open(db_save_folder +"/db.pickle", "wb") as f:
-            pickle.dump(idx_to_label, f)
+            pickle.dump(id_to_label, f)
 
-    return annoy_tree, idx_to_label
+    return annoy_tree, id_to_label
