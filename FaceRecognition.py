@@ -17,7 +17,7 @@ def loadModel(backbone_name, weight_path, fp16=False):
     model = model.cuda()
     return model
 
-def faceRecognition(input_video_path, out_video_path, model_path, annoy_tree, id_to_label):
+def faceRecognition(input_video_path, out_video_path, annoy_tree, id_to_label):
     
     cap = cv2.VideoCapture(input_video_path)
 
