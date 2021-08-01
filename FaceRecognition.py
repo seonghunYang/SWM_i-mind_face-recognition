@@ -4,7 +4,7 @@ from sklearn.preprocessing import normalize
 
 from annoy import AnnoyIndex
 from retinaface import RetinaFace
-from preprocess import alignImage, preprocessImage
+from preprocess import alignImage, preprocessImage, cropFullFace
 from inference import imgToEmbedding, identifyFace
 from visualization import drawFrameWithBbox
 from backbones import get_model
@@ -17,7 +17,7 @@ def loadModel(backbone_name, weight_path, fp16=False):
     model = model.cuda()
     return model
 
-def faceRecognition(input_video_path, out_video_path, annoy_tree, id_to_label):
+def faceRecognition(input_video_path, out_video_path, annoy_tree, id_to_label, is_align=True):
     
     cap = cv2.VideoCapture(input_video_path)
 
@@ -45,16 +45,25 @@ def faceRecognition(input_video_path, out_video_path, annoy_tree, id_to_label):
         try:
             detect_faces = RetinaFace.detect_faces(img_path=img_frame, model=detect_model)
             if (type(detect_faces) == dict):
-                align_face_imgs = alignImage(img_frame, detect_faces)
+                if is_align:
+                    crop_face_imgs = alignImage(img, detect_faces)
+                else:
+                    crop_face_imgs = []
+                    for key in detect_faces.keys():
+                        face = detect_faces[key]
+                        facial_area = face['facial_area']
+                        crop_face = cropFullFace(img_frame, facial_area)
+                        crop_face = cv2.resize(crop_face, (112, 112))
+                        crop_face_imgs.append(crop_face)
                 identities = []
-                for face_img in align_face_imgs:
+                for face_img in crop_face_imgs:
                     process_face_img, process_flip_face_img = preprocessImage(face_img)
                     embedding = imgToEmbedding(process_face_img, recognition_model, img_flip=process_flip_face_img)
 
                     annoy_idx, distacne = annoy_tree.get_nns_by_vector(embedding, 1, include_distances=True)
                     identity = id_to_label[annoy_idx[0]]
 
-                    identity = identity + str(distacne)
+                    identity = identity + str(round(distacne[0], 2))
 
                     identities.append(identity)
                 img_frame = drawFrameWithBbox(img_frame, detect_faces, identities)
@@ -70,7 +79,7 @@ def faceRecognition(input_video_path, out_video_path, annoy_tree, id_to_label):
 
     print("최종 완료 수행 시간: ", round(time.time() - btime, 4))
 
-def createEmbeddingDB(db_folder_path, db_save_folder=None, img_show=False, build_tree=10):
+def createEmbeddingDB(db_folder_path, db_save_path=None, is_align=True, img_show=False, build_tree=10):
     db = {
         "labels": [],
         "embedding": []
@@ -91,18 +100,26 @@ def createEmbeddingDB(db_folder_path, db_save_folder=None, img_show=False, build
             img = cv2.imread(face_folder_path + "/" + img_name)
             detect_faces = RetinaFace.detect_faces(img_path=img)
             if (type(detect_faces) == dict):
-                alignment_face_imgs = alignImage(img, detect_faces)
+                if is_align:
+                    crop_face_imgs = alignImage(img, detect_faces)
+                else:
+                    crop_face_imgs = []
+                    for key in detect_faces.keys():
+                        face = detect_faces[key]
+                        facial_area = face['facial_area']
+                        crop_face = cropFullFace(img, facial_area)
+                        crop_face = cv2.resize(crop_face, (112, 112))
+                        crop_face_imgs.append(crop_face)
             # embedding
-                for face_img in alignment_face_imgs:
+                for face_img in crop_face_imgs:
                     process_face_img, process_flip_face_img = preprocessImage(face_img)
                     embedding = imgToEmbedding(process_face_img, recognition_model, img_flip=process_flip_face_img)
                     db["embedding"].append(embedding)
                     db['labels'].append(label)
                     labels.append(label)
-                if img_show:
-                    img_bbox = drawFrameWithBbox(img, detect_faces, labels)
-                    plt.imshow(img_bbox)
-                    plt.show()
+                    if img_show:
+                        plt.imshow(face_img)
+                        plt.show()
     db['embedding'] = normalize(db['embedding'])
 
     #annoy 객체에 담기
@@ -113,9 +130,9 @@ def createEmbeddingDB(db_folder_path, db_save_folder=None, img_show=False, build
         id_to_label[idx] = db['labels'][idx]
         
     annoy_tree.build(build_tree)
-    if db_save_folder:
-        annoy_tree.save(db_save_folder+"/db.ann")
-        with open(db_save_folder +"/db.pickle", "wb") as f:
+    if db_save_path:
+        annoy_tree.save(db_save_path+"_db.ann")
+        with open(db_save_path +"_id_to_label.pickle", "wb") as f:
             pickle.dump(id_to_label, f)
 
     return annoy_tree, id_to_label

@@ -71,3 +71,15 @@ def preprocessImage(img, flip=True):
         return img_normal, img_flip
 
     return img_normal
+
+def cropFullFace(img, area):
+    img_copy = img.copy()
+    left = area[0]
+    top = area[1]
+    right = area[2]
+    bottom = area[3]
+    center = [(top + bottom) // 2, (left + right) // 2]
+    y_half_len = (bottom - top) // 2
+    full_left = max(0, center[1] - y_half_len) 
+    full_right = min(center[1] + y_half_len, len(img_copy[1])) 
+    return img_copy[top: bottom, full_left: full_right, ::-1]

@@ -21,7 +21,7 @@ def drawFrameWithBbox(frame, detected_faces, labels):
       bottom = face_area[3]
 
       cv2.rectangle(draw_frame, (left, top), (right, bottom), (255, 0, 0), 1)
-      cv2.putText(draw_frame, labels[idx], (int(left), int(top - 7)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+      cv2.putText(draw_frame, labels[idx], (int(left), int(top - 7)), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
       landmarks = face['landmarks']
       idx += 1
       # landmark 
