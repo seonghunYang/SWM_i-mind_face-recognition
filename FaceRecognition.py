@@ -46,7 +46,7 @@ def faceRecognition(input_video_path, out_video_path, annoy_tree, id_to_label, i
             detect_faces = RetinaFace.detect_faces(img_path=img_frame, model=detect_model)
             if (type(detect_faces) == dict):
                 if is_align:
-                    crop_face_imgs = alignImage(img, detect_faces)
+                    crop_face_imgs = alignImage(img_frame, detect_faces)
                 else:
                     crop_face_imgs = []
                     for key in detect_faces.keys():
@@ -61,9 +61,13 @@ def faceRecognition(input_video_path, out_video_path, annoy_tree, id_to_label, i
                     embedding = imgToEmbedding(process_face_img, recognition_model, img_flip=process_flip_face_img)
 
                     annoy_idx, distacne = annoy_tree.get_nns_by_vector(embedding, 1, include_distances=True)
-                    identity = id_to_label[annoy_idx[0]]
+                    
+                    if distacne[0] < 1:
+                        identity = id_to_label[annoy_idx[0]]
+                    else:
+                        identity = ""
 
-                    identity = identity + str(round(distacne[0], 2))
+                    # identity = identity + str(round(distacne[0], 2))
 
                     identities.append(identity)
                 img_frame = drawFrameWithBbox(img_frame, detect_faces, identities)
@@ -136,3 +140,55 @@ def createEmbeddingDB(db_folder_path, db_save_path=None, is_align=True, img_show
             pickle.dump(id_to_label, f)
 
     return annoy_tree, id_to_label
+
+def trackingIdToFaceID(images_by_id, final_fuse_id, db_folder_path):
+    track_id = list(final_fuse_id.keys())
+    track_id_to_face_id = dict()
+
+    #모델 로드
+    detect_model = RetinaFace.build_model()
+    recognition_model = loadModel("r50", "/content/drive/MyDrive/face_recognition_modules/glint360k_cosface_r50_fp16_0.1/backbone.pth")
+
+    #db 로드
+    annoy_tree = AnnoyIndex(512, "euclidean")
+    annoy_tree.load(db_save_folder+"db.ann")
+    with open(db_save_folder +"db.pickle", "rb") as f:
+        id_to_label = pickle.load(f)
+
+    for id in track_id:
+        print("{} 시작 개수 :{}".format(id, len(images_by_id[id])))
+        frequency_face_id = {
+            "unknown": 0
+        }
+        for idx, img in enumerate(images_by_id[id]):
+            stime = time.time()
+            try:
+                detect_faces = RetinaFace.detect_faces(img_path=img, model=detect_model)
+            except:
+                continue
+            if (type(detect_faces) == dict):
+                crop_face_imgs = []
+                for key in detect_faces.keys():
+                        face = detect_faces[key]
+                        facial_area = face['facial_area']
+                        crop_face = cropFullFace(img, facial_area)
+                        crop_face = cv2.resize(crop_face, (112, 112))
+                        crop_face_imgs.append(crop_face)
+
+                for face_img in crop_face_imgs:
+                    process_face_img, process_flip_face_img = preprocessImage(face_img)
+                    embedding = imgToEmbedding(process_face_img, model, img_flip=process_flip_face_img)
+                    annoy_idx, distance = annoy_tree.get_nns_by_vector(embedding, 1, include_distances=True)
+                    face_id = id_to_label[annoy_idx[0]]
+                    if distance[0] < 1.3:
+                        if frequency_face_id.get(face_id):
+                            frequency_face_id[face_id] += 1
+                        else:
+                            frequency_face_id[face_id] = 1
+                    else:
+                        frequency_face_id['unknown'] += 1
+            print(time.time() -stime, idx)
+        mode_face_id = max(frequency_face_id, key=frequency_face_id.get)
+        track_id_to_face_id[id] = mode_face_id
+
+    return track_id_to_face_id
