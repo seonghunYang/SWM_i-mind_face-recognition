@@ -8,14 +8,8 @@ from preprocess import alignImage, preprocessImage, cropFace
 from inference import imgToEmbedding, identifyFace
 from visualization import drawFrameWithBbox
 from backbones import get_model
-from utils.utils import checkImgExtension 
+from utils import checkImgExtension 
 
-def loadModel(backbone_name, weight_path, fp16=False):
-    model = get_model(backbone_name, fp16=fp16)
-    model.load_state_dict(torch.load(weight_path))
-    model.eval()
-    model = model.cuda()
-    return model
 
 def faceRecognition(input_video_path, out_video_path, annoy_tree, id_to_label, is_align=True):
     
@@ -83,7 +77,7 @@ def faceRecognition(input_video_path, out_video_path, annoy_tree, id_to_label, i
 
     print("최종 완료 수행 시간: ", round(time.time() - btime, 4))
 
-def createEmbeddingDB(db_folder_path, db_save_path=None, is_align=True, img_show=False, build_tree=10):
+def createFaceDB(db_folder_path, db_save_path=None, is_align=True, img_show=False, build_tree=10):
     db = {
         "labels": [],
         "embedding": []
@@ -151,8 +145,8 @@ def trackingIdToFaceID(images_by_id, final_fuse_id, db_folder_path):
 
     #db 로드
     annoy_tree = AnnoyIndex(512, "euclidean")
-    annoy_tree.load(db_save_folder+"db.ann")
-    with open(db_save_folder +"db.pickle", "rb") as f:
+    annoy_tree.load(db_folder_path+"db.ann")
+    with open(db_folder_path +"db.pickle", "rb") as f:
         id_to_label = pickle.load(f)
 
     for id in track_id:
@@ -177,7 +171,7 @@ def trackingIdToFaceID(images_by_id, final_fuse_id, db_folder_path):
 
                 for face_img in crop_face_imgs:
                     process_face_img, process_flip_face_img = preprocessImage(face_img)
-                    embedding = imgToEmbedding(process_face_img, model, img_flip=process_flip_face_img)
+                    embedding = imgToEmbedding(process_face_img, recognition_model, img_flip=process_flip_face_img)
                     annoy_idx, distance = annoy_tree.get_nns_by_vector(embedding, 1, include_distances=True)
                     face_id = id_to_label[annoy_idx[0]]
                     if distance[0] < 1.3:
@@ -192,3 +186,10 @@ def trackingIdToFaceID(images_by_id, final_fuse_id, db_folder_path):
         track_id_to_face_id[id] = mode_face_id
 
     return track_id_to_face_id
+
+def loadModel(backbone_name, weight_path, fp16=False):
+    model = get_model(backbone_name, fp16=fp16)
+    model.load_state_dict(torch.load(weight_path))
+    model.eval()
+    model = model.cuda()
+    return model

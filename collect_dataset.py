@@ -8,12 +8,114 @@ from preprocess import alignImage, preprocessImage, cropFace
 from inference import imgToEmbedding, identifyFace, calculateDistance
 from visualization import drawFrameWithBbox
 from backbones import get_model
-from utils.utils import checkImgExtension 
+from utils import checkImgExtension 
 from FaceRecognition import loadModel
 
+def DAR(root_path, page, number, model):
+    #seed
+    logging.basicConfig(filename=root_path + "/log/page{}.log".format(page), format="%(asctime)s %(levelname)s %(message)s")
+    try:
+        seed = createEmbedingSeed(root_path + "/seed", str(number), model, img_show=True)
+        print("시드 라벨 개수: ", len(seed['labels']))
+        #filter-1
+        collect_img = collectFaceImageWithSeed(root_path + "/video/page{}/{}.mp4".format(page, number), model, seed, 1)
+        print("1차 필터링 완료")
+        for i in range(len(collect_img)):
+            print("{}번: {}개".format(i,len(collect_img[i])))
+        #filter-2 and filter-3
+        for i in range(len(collect_img)):
+            filter_collect_img = filterCosineSimilarity(collect_img[i], model)
+            print("{}번 2차필터링 완료: {}개".format(i ,len(filter_collect_img)) )
+            #save
+            save_folder_name = int(number) + int(i)
+            selectNearImageAndSave(filter_collect_img, save_folder_name)
+            print("{}번 3차 필터링 완료 저장 끝".format(i))
+    except:
+        logging.error(traceback.format_exc())
+        traceback.print_exc()
 
 
-def collectFaceImageWithSeed(input_video_path, model_path, seed, threshold):
+def GDC(root_path, actor_name, recognition_model):
+    seed_path = root_path + "/seed/{}.jpg".format(actor_name)
+    faces_folder_path = root_path + "/face/{} 아역_img".format(actor_name)
+
+    # 시드 이미지 임베딩
+    seed_embedding = pathToEmbedding(seed_path, recognition_model)
+    print("{} 시드 세팅 완료".format(actor_name))
+
+    #나머지 임베딩 하면서 거리 비교
+    img_distance_list = []
+    face_img_list = os.listdir(faces_folder_path)
+    for img_name in face_img_list:
+        if checkImgExtension(img_name):
+            stime = time.time()
+            actor_img_path = faces_folder_path + "/{}".format(img_name)
+            embedding, img = pathToEmbedding(actor_img_path, recognition_model, img_return=True)
+            distance = calculateDistance(embedding, seed_embedding)
+            if distance < 1:
+                img_distance_list.append([img, distance])
+            print("{} 처리 시간: {}".format(img_name, round(time.time() - stime), 4))
+    # 거리 순으로 정렬
+    img_distance_list.sort(key=lambda x:x[1])
+
+    # 최대 60개 필터
+    extract_num = min(60, len(img_distance_list))
+    img_distance_list = img_distance_list[:extract_num]
+    directory = "/content/drive/MyDrive/face_recognition_modules/crawling/result/{}".format(actor_name)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    #저장
+    for idx, img in enumerate(img_distance_list):
+        plt.imsave(directory + "/{}.jpg".format(idx), img[0])
+
+def detectFaceAndFilterSimilarity(root_path):
+    # 초기 설정
+    actor_folder_list = os.listdir(root_path+"/raw_image")
+    detect_model = RetinaFace.build_model()
+    recognition_model = loadModel("r50", "/content/drive/MyDrive/face_recognition_modules/glint360k_cosface_r50_fp16_0.1/backbone.pth")
+    
+    for actor_folder in actor_folder_list:
+        print(actor_folder, "처리 시작")
+        stime = time.time()
+
+        save_folder_path = root_path + "/face/{}".format(actor_folder)
+        if os.path.exists(save_folder_path):
+            print("이미 {}가 처리되었습니다".format(actor_folder))
+            continue
+        else:
+            createFolder(save_folder_path)
+
+        actor_folder_path = root_path + "/raw_image/{}".format(actor_folder)
+        actor_img_list = os.listdir(actor_folder_path)
+        collect_img = []
+        for actor_img in actor_img_list:
+            print(actor_img, "처리 시작")
+            if checkImgExtension(actor_img):
+                img_path = actor_folder_path + "/{}".format(actor_img)
+                actor_face_img = cv2.imread(img_path)
+                # 얼굴만 detection해서 잘라냄
+                try:
+                    detect_faces = RetinaFace.detect_faces(actor_face_img, model=detect_model)
+                except:
+                    print("다음 사진 이동")
+                    continue
+                if (type(detect_faces) == dict):
+                    for key in detect_faces.keys():
+                        face = detect_faces[key]
+                        facial_area = face['facial_area']
+                        crop_face = cropFace(actor_face_img, facial_area, square=True)
+                        crop_face = cv2.resize(crop_face[:, :, ::-1], (112, 112))
+                        collect_img.append([crop_face])
+        # 코사인 유사도로 중복 제거
+        new_collect_img = filterCosineSimilarity(collect_img, recognition_model)
+        print("{}개 중 {}개 추출".format(len(collect_img), len(new_collect_img)))
+        #저장
+        for idx, img in enumerate(new_collect_img):
+            plt.imsave(save_folder_path + "/{}.jpg".format(idx), img[0])
+        print("{} 처리 완료: {}".format(actor_folder, round(time.time() - stime)))
+
+
+def collectFaceImageWithSeed(input_video_path, recognition_model_path, seed, threshold):
     
     cap = cv2.VideoCapture(input_video_path)
 
@@ -24,10 +126,10 @@ def collectFaceImageWithSeed(input_video_path, model_path, seed, threshold):
     btime = time.time()
 
     detect_model = RetinaFace.build_model()
-    if type(model_path) == str:
-        recognition_model = loadModel("r50", model_path)
+    if type(recognition_model_path) == str:
+        recognition_model = loadModel("r50", recognition_model_path)
     else:
-        recognition_model = model_path
+        recognition_model = recognition_model_path
     
     collect_img = [[] for _ in range(len(seed['labels']))]
     
@@ -114,6 +216,7 @@ def createEmbedingSeed(root_path, folder_name , model, img_show=False):
     seed['embedding'] = normalize(seed['embedding'])
     return seed
 
+
 def filterCosineSimilarity(collect_img, model):
     embeddings = []
     for i in range(len(collect_img)):
@@ -152,29 +255,6 @@ def selectNearImageAndSave(filter_collect_img, number):
       plt.imsave(directory + "/{}.jpg".format(idx), img[0])
 
 
-def collectDatasetPipeline(root_path, page, number, model):
-    #seed
-    logging.basicConfig(filename=root_path + "/log/page{}.log".format(page), format="%(asctime)s %(levelname)s %(message)s")
-    try:
-        seed = createEmbedingSeed(root_path + "/seed", str(number), model, img_show=True)
-        print("시드 라벨 개수: ", len(seed['labels']))
-        #filter-1
-        collect_img = collectFaceImageWithSeed(root_path + "/video/page{}/{}.mp4".format(page, number), model, seed, 1)
-        print("1차 필터링 완료")
-        for i in range(len(collect_img)):
-            print("{}번: {}개".format(i,len(collect_img[i])))
-        #filter-1 and filter-1
-        for i in range(len(collect_img)):
-            filter_collect_img = filterCosineSimilarity(collect_img[i], model)
-            print("{}번 2차필터링 완료: {}개".format(i ,len(filter_collect_img)) )
-            #save
-            save_folder_name = int(number) + int(i)
-            selectNearImageAndSave(filter_collect_img, save_folder_name)
-            print("{}번 3차 필터링 완료 저장 끝".format(i))
-    except:
-        logging.error(traceback.format_exc())
-        traceback.print_exc()
-
 def createFolder(directory):
     try:
         if not os.path.exists(directory):
@@ -185,77 +265,7 @@ def createFolder(directory):
         print('Error: Creating directory: ' + directory)
 
 
-def filterCosineSimilarityForImage(collect_img, model):
-    embeddings = []
-    for i in range(len(collect_img)):
-        img = collect_img[i]
-        im, flip_im = preprocessImage(img)
-        embedding = imgToEmbedding(im, model, img_flip=flip_im)
-        embeddings.append(embedding)
 
-    similarity_metrics = cosine_similarity(embeddings)
-
-    duplicate_image_idx = set()
-
-    for i in range(len(similarity_metrics[0])):
-        if i in duplicate_image_idx:
-            continue
-        for j in range(i+1, len(similarity_metrics[1])):
-            if similarity_metrics[i][j] >= 0.8:
-                duplicate_image_idx.add(j)
-    new_collect_img = []
-
-    for i in range(len(collect_img)):
-        if i in duplicate_image_idx:
-            continue
-        new_collect_img.append(collect_img[i])
-    return new_collect_img
-
-def detectFaceAndFilterSimilarity(root_path):
-    # 초기 설정
-    actor_folder_list = os.listdir(root_path+"/raw_image")
-    detect_model = RetinaFace.build_model()
-    recognition_model = loadModel("r50", "/content/drive/MyDrive/face_recognition_modules/glint360k_cosface_r50_fp16_0.1/backbone.pth")
-    
-    for actor_folder in actor_folder_list:
-        print(actor_folder, "처리 시작")
-        stime = time.time()
-
-        save_folder_path = root_path + "/face/{}".format(actor_folder)
-        if os.path.exists(save_folder_path):
-            print("이미 {}가 처리되었습니다".format(actor_folder))
-            continue
-        else:
-            createFolder(save_folder_path)
-
-        actor_folder_path = root_path + "/raw_image/{}".format(actor_folder)
-        actor_img_list = os.listdir(actor_folder_path)
-        collect_img = []
-        for actor_img in actor_img_list:
-            print(actor_img, "처리 시작")
-            if checkImgExtension(actor_img):
-                img_path = actor_folder_path + "/{}".format(actor_img)
-                actor_face_img = cv2.imread(img_path)
-                # 얼굴만 detection해서 잘라냄
-                try:
-                    detect_faces = RetinaFace.detect_faces(actor_face_img, model=detect_model)
-                except:
-                    print("다음 사진 이동")
-                    continue
-                if (type(detect_faces) == dict):
-                    for key in detect_faces.keys():
-                        face = detect_faces[key]
-                        facial_area = face['facial_area']
-                        crop_face = cropFace(actor_face_img, facial_area, square=True)
-                        crop_face = cv2.resize(crop_face[:, :, ::-1], (112, 112))
-                        collect_img.append(crop_face)
-        # 코사인 유사도로 중복 제거
-        new_collect_img = filterCosineSimilarityForImage(collect_img, recognition_model)
-        print("{}개 중 {}개 추출".format(len(collect_img), len(new_collect_img)))
-        #저장
-        for idx, img in enumerate(new_collect_img):
-            plt.imsave(save_folder_path + "/{}.jpg".format(idx), img)
-        print("{} 처리 완료: {}".format(actor_folder, round(time.time() - stime)))
 
 def pathToEmbedding(img_path, recognition_model, img_return=False):
     img = cv2.imread(img_path)
@@ -267,35 +277,3 @@ def pathToEmbedding(img_path, recognition_model, img_return=False):
     return embedding
 
 
-def filterActorFace(root_path, actor_name, recognition_model):
-    seed_path = root_path + "/seed/{}.jpg".format(actor_name)
-    faces_folder_path = root_path + "/face/{} 아역_img".format(actor_name)
-
-    # 시드 이미지 임베딩
-    seed_embedding = pathToEmbedding(seed_path, recognition_model)
-    print("{} 시드 세팅 완료".format(actor_name))
-
-    #나머지 임베딩 하면서 거리 비교
-    img_distance_list = []
-    face_img_list = os.listdir(faces_folder_path)
-    for img_name in face_img_list:
-        if checkImgExtension(img_name):
-            stime = time.time()
-            actor_img_path = faces_folder_path + "/{}".format(img_name)
-            embedding, img = pathToEmbedding(actor_img_path, recognition_model, img_return=True)
-            distance = calculateDistance(embedding, seed_embedding)
-            if distance < 1:
-                img_distance_list.append([img, distance])
-            print("{} 처리 시간: {}".format(img_name, round(time.time() - stime), 4))
-    # 거리 순으로 정렬
-    img_distance_list.sort(key=lambda x:x[1])
-
-    # 최대 60개 필터
-    extract_num = min(60, len(img_distance_list))
-    img_distance_list = img_distance_list[:extract_num]
-    directory = "/content/drive/MyDrive/face_recognition_modules/crawling/result/{}".format(actor_name)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    #저장
-    for idx, img in enumerate(img_distance_list):
-        plt.imsave(directory + "/{}.jpg".format(idx), img[0])
