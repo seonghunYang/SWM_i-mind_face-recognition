@@ -4,7 +4,7 @@ from sklearn.preprocessing import normalize
 from sklearn.metrics.pairwise import cosine_similarity
 
 from retinaface import RetinaFace
-from preprocess import alignImage, preprocessImage, cropFullFace
+from preprocess import alignImage, preprocessImage, cropFace
 from inference import imgToEmbedding, identifyFace, calculateDistance
 from visualization import drawFrameWithBbox
 from backbones import get_model
@@ -50,8 +50,8 @@ def collectFaceImageWithSeed(input_video_path, model_path, seed, threshold):
             for key in detect_faces.keys():
                 face = detect_faces[key]
                 facial_area = face['facial_area']
-                crop_face = cropFullFace(img_frame, facial_area)
-                crop_face = cv2.resize(crop_face, (112, 112))
+                crop_face = cropFace(img_frame, facial_area, square=True)
+                crop_face = cv2.resize(crop_face[:, :, ::-1], (112, 112))
                 crop_face_imgs.append(crop_face)
 
             for face_img in crop_face_imgs:
@@ -100,8 +100,8 @@ def createEmbedingSeed(root_path, folder_name , model, img_show=False):
             key = list(detect_face.keys())[0]
             face = detect_face[key]
             facial_area = face['facial_area']
-            crop_face = cropFullFace(img, facial_area)
-            crop_face = cv2.resize(crop_face, (112, 112))
+            crop_face = cropFace(img, facial_area, square=True)
+            crop_face = cv2.resize(crop_face[:, :, ::-1], (112, 112))
             
             #embedding
             process_face_img, process_flip_face_img = preprocessImage(crop_face)
@@ -246,8 +246,8 @@ def detectFaceAndFilterSimilarity(root_path):
                     for key in detect_faces.keys():
                         face = detect_faces[key]
                         facial_area = face['facial_area']
-                        crop_face = cropFullFace(actor_face_img, facial_area)
-                        crop_face = cv2.resize(crop_face, (112, 112))
+                        crop_face = cropFace(actor_face_img, facial_area, square=True)
+                        crop_face = cv2.resize(crop_face[:, :, ::-1], (112, 112))
                         collect_img.append(crop_face)
         # 코사인 유사도로 중복 제거
         new_collect_img = filterCosineSimilarityForImage(collect_img, recognition_model)

@@ -4,7 +4,7 @@ from sklearn.preprocessing import normalize
 
 from annoy import AnnoyIndex
 from retinaface import RetinaFace
-from preprocess import alignImage, preprocessImage, cropFullFace
+from preprocess import alignImage, preprocessImage, cropFace
 from inference import imgToEmbedding, identifyFace
 from visualization import drawFrameWithBbox
 from backbones import get_model
@@ -52,8 +52,8 @@ def faceRecognition(input_video_path, out_video_path, annoy_tree, id_to_label, i
                     for key in detect_faces.keys():
                         face = detect_faces[key]
                         facial_area = face['facial_area']
-                        crop_face = cropFullFace(img_frame, facial_area)
-                        crop_face = cv2.resize(crop_face, (112, 112))
+                        crop_face = cropFace(img_frame, facial_area, square=True)
+                        crop_face = cv2.resize(crop_face[:, :, ::-1], (112, 112))
                         crop_face_imgs.append(crop_face)
                 identities = []
                 for face_img in crop_face_imgs:
@@ -111,8 +111,8 @@ def createEmbeddingDB(db_folder_path, db_save_path=None, is_align=True, img_show
                     for key in detect_faces.keys():
                         face = detect_faces[key]
                         facial_area = face['facial_area']
-                        crop_face = cropFullFace(img, facial_area)
-                        crop_face = cv2.resize(crop_face, (112, 112))
+                        crop_face = cropFace(img, facial_area, square=True)
+                        crop_face = cv2.resize(crop_face[:, :, ::-1], (112, 112))
                         crop_face_imgs.append(crop_face)
             # embedding
                 for face_img in crop_face_imgs:
@@ -171,8 +171,8 @@ def trackingIdToFaceID(images_by_id, final_fuse_id, db_folder_path):
                 for key in detect_faces.keys():
                         face = detect_faces[key]
                         facial_area = face['facial_area']
-                        crop_face = cropFullFace(img, facial_area)
-                        crop_face = cv2.resize(crop_face, (112, 112))
+                        crop_face = cropFace(img, facial_area, square=True)
+                        crop_face = cv2.resize(crop_face[:, :, ::-1], (112, 112))
                         crop_face_imgs.append(crop_face)
 
                 for face_img in crop_face_imgs:
