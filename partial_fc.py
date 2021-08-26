@@ -35,27 +35,14 @@ class PartialFC(Module):
         self.class_start: int = num_classes // world_size * rank + min(rank, num_classes % world_size)
         self.num_sample: int = int(self.sample_rate * self.num_local)
 
-        self.weight_name = os.path.join(self.prefix, "rank_{}_softmax_weight.pt".format(self.rank))
-        self.weight_mom_name = os.path.join(self.prefix, "rank_{}_softmax_weight_mom.pt".format(self.rank))
+        self.weight_name = os.path.join(self.prefix, "rank_softmax_weight.pt")
+        self.weight_mom_name = os.path.join(self.prefix, "rank_softmax_weight_mom.pt")
 
-        if resume:
-            try:
-                self.weight: torch.Tensor = torch.load(self.weight_name)
-                self.weight_mom: torch.Tensor = torch.load(self.weight_mom_name)
-                if self.weight.shape[0] != self.num_local or self.weight_mom.shape[0] != self.num_local:
-                    raise IndexError
-                logging.info("softmax weight resume successfully!")
-                logging.info("softmax weight mom resume successfully!")
-            except (FileNotFoundError, KeyError, IndexError):
-                self.weight = torch.normal(0, 0.01, (self.num_local, self.embedding_size), device=self.device)
-                self.weight_mom: torch.Tensor = torch.zeros_like(self.weight)
-                logging.info("softmax weight init!")
-                logging.info("softmax weight mom init!")
-        else:
-            self.weight = torch.normal(0, 0.01, (self.num_local, self.embedding_size), device=self.device)
-            self.weight_mom: torch.Tensor = torch.zeros_like(self.weight)
-            logging.info("softmax weight init successfully!")
-            logging.info("softmax weight mom init successfully!")
+
+        self.weight = torch.normal(0, 0.01, (self.num_local, self.embedding_size), device=self.device)
+        self.weight_mom: torch.Tensor = torch.zeros_like(self.weight)
+        logging.info("softmax weight init successfully!")
+        logging.info("softmax weight mom init successfully!")
         self.stream: torch.cuda.Stream = torch.cuda.Stream(local_rank)
 
         self.index = None
