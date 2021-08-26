@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 from backbones import get_model
 import losses
-from dataset import MXFaceDataset, SyntheticDataset, ECFaceDataset ,DataLoaderX
+from dataset import MXFaceDataset, ECFaceDataset ,DataLoaderX
 
 from partial_fc import PartialFC
 from utils.utils_amp import MaxClipGradScaler
@@ -23,29 +23,25 @@ from utils.utils_logging import AverageMeter, init_logging
 
 def main(args):
     cfg = get_config(args.config)
-    world_size = 1
-    rank = 0
-    dist.init_process_group(backend='nccl', init_method="tcp://127.0.0.1:12584", rank=rank, world_size=world_size)
+    try:
+        world_size = int(os.environ['WORLD_SIZE'])
+        rank = int(os.environ['RANK'])
+        dist.init_process_group('nccl')
+    except KeyError:
+        world_size = 1
+        rank = 0
+        dist.init_process_group(backend='nccl', init_method="tcp://127.0.0.1:12584", rank=rank, world_size=world_size)
         
-    local_rank = 0
+    local_rank = args.local_rank
     torch.cuda.set_device(local_rank)
     os.makedirs(cfg.output, exist_ok=True)
     init_logging(rank, cfg.output)
 
-    if cfg.rec == "ECF":
-        train_set = ECFaceDataset(root_dir=cfg.rec)
-    elif cfg.rec == "synthetic":
-        train_set = SyntheticDataset(local_rank=local_rank)
-    else:
-        train_set = MXFaceDataset(root_dir=cfg.rec, local_rank=local_rank)
+    train_set = ECFaceDataset(root_dir=cfg.rec)
 
-    if cfg.rec == "ECF":
-        train_loader = DataLoader(train_set, batch_size=cfg.batch_size, shuffle=True, pin_memory=True)
-    else:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(train_set, shuffle=True)
-        train_loader = DataLoaderX(
-            local_rank=local_rank, dataset=train_set, batch_size=cfg.batch_size,
-            sampler=train_sampler, num_workers=2, pin_memory=True, drop_last=True)
+    train_sampler = torch.utils.data.distributed.DistributedSampler(train_set, shuffle=True)
+    train_loader = DataLoaderX(
+        local_rank=local_rank, dataset=train_set, batch_size=cfg.batch_size, sampler=train_sampler, pin_memory=True, drop_last=True)
     
     backbone = get_model(cfg.network, dropout=0.0, fp16=cfg.fp16, num_features=cfg.embedding_size).to(local_rank)
 
@@ -101,9 +97,9 @@ def main(args):
         logging.info(": " + key + " " * num_space + str(value))
 
     val_target = cfg.val_targets
-    callback_verification = CallBackVerification(2000, rank, val_target, cfg.rec)
+    callback_verification = CallBackVerification(100, rank, val_target, cfg.verpath)
     callback_logging = CallBackLogging(50, rank, cfg.total_step, cfg.batch_size, world_size, None)
-    callback_checkpoint = CallBackModelCheckpoint(rank, cfg.output)
+    callback_checkpoint = CallBackModelCheckpoint(rank, cfg.savefolder)
 
     loss = AverageMeter()
     start_epoch = 0
@@ -142,4 +138,5 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     parser = argparse.ArgumentParser(description='facei ArcFace Training')
     parser.add_argument('config', type=str, help='py config file')
+    parser.add_argument('--local_rank', type=int, default=0, help='local_rank')
     main(parser.parse_args())

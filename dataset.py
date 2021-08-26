@@ -117,26 +117,29 @@ class MXFaceDataset(Dataset):
 
 class ECFaceDataset(Dataset):
   def __init__(self, root_dir):
+    super(ECFaceDataset, self).__init__()
     self.transform = transforms.Compose(
         [transforms.ToPILImage(),
          transforms.RandomHorizontalFlip(),
          transforms.ToTensor(),
          transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),                                 
     ])
-
+    self.local_rank = 0
     self.idx_imgs = []
     self.idx_labels = []
 
     labels = os.listdir(root_dir)
 
-    for label in labels:
+    for label in labels[:10]:
       path_label_imgs = os.path.join(root_dir, label)
       for img_name in os.listdir(path_label_imgs):
         path_img = os.path.join(path_label_imgs, img_name)
         img = cv2.imread(path_img)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         self.idx_imgs.append(img)
-        self.idx_labels.append(label)
+        label_np = float(label)
+        label_np = np.array([label_np], dtype='float32')
+        self.idx_labels.append(label_np)
 
   def __len__(self):
     return len(self.idx_labels)
@@ -144,6 +147,8 @@ class ECFaceDataset(Dataset):
   def __getitem__(self, index):
     idx_label = self.idx_labels[index]
     idx_img = self.idx_imgs[index]
+
+    idx_label = torch.tensor(idx_label[0], dtype=torch.long)
 
     if self.transform is not None:
       idx_img = self.transform(idx_img)
