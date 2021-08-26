@@ -5,7 +5,7 @@ import threading
 
 import mxnet as mx
 import numpy as np
-import torch
+import torch, cv2
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
@@ -127,10 +127,10 @@ class ECFaceDataset(Dataset):
     self.idx_imgs = []
     self.idx_labels = []
 
-    labels = os.listdir(root)
+    labels = os.listdir(root_dir)
 
-    for label in labels[:10]:
-      path_label_imgs = os.path.join(root, label)
+    for label in labels:
+      path_label_imgs = os.path.join(root_dir, label)
       for img_name in os.listdir(path_label_imgs):
         path_img = os.path.join(path_label_imgs, img_name)
         img = cv2.imread(path_img)
