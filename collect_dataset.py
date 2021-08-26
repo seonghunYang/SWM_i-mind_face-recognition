@@ -8,7 +8,7 @@ from preprocess import alignImage, preprocessImage, cropFace
 from inference import imgToEmbedding, identifyFace, calculateDistance
 from visualization import drawFrameWithBbox
 from backbones import get_model
-from utils import checkImgExtension 
+from tools import checkImgExtension 
 from FaceRecognition import loadModel
 
 def DAR(root_path, page, number, model):
